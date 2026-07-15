@@ -5,12 +5,13 @@ struct PixivCommentRow: View {
 
     let illustrationID: Int
     let comment: PixivComment
+    let onShowUser: (Int) -> Void
     let onReply: (() -> Void)?
     let onShowReplies: (() -> Void)?
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            NavigationLink(value: AppRoute.user(id: comment.user.id)) {
+            Button(action: showUser) {
                 RemoteImageView(url: comment.user.profileImageURLs.medium)
                     .frame(width: 42, height: 42)
                     .clipShape(Circle())
@@ -27,12 +28,14 @@ struct PixivCommentRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.vertical, 6)
+        .fixedSize(horizontal: false, vertical: true)
+        .contentShape(Rectangle())
         .contextMenu { moreActions }
     }
 
     private var header: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
-            NavigationLink(value: AppRoute.user(id: comment.user.id)) {
+            Button(action: showUser) {
                 Text(comment.user.name)
                     .font(.subheadline.weight(.semibold))
                     .lineLimit(1)
@@ -43,6 +46,8 @@ struct PixivCommentRow: View {
                 Text(comment.displayDate)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
             }
         }
     }
@@ -56,8 +61,7 @@ struct PixivCommentRow: View {
                         .font(.caption.weight(.semibold))
                 }
                 if !parent.comment.isEmpty {
-                    Text(parent.comment)
-                        .font(.caption)
+                    PixivCommentText(content: parent.comment, font: .caption)
                         .lineLimit(3)
                 }
             }
@@ -76,10 +80,7 @@ struct PixivCommentRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 10))
                 .clipped()
         } else if !comment.comment.isEmpty {
-            Text(comment.comment)
-                .font(.body)
-                .textSelection(.enabled)
-                .fixedSize(horizontal: false, vertical: true)
+            PixivCommentText(content: comment.comment)
         } else {
             Text("（无内容）")
                 .font(.body)
@@ -122,5 +123,9 @@ struct PixivCommentRow: View {
         Link(destination: PixivWebLinks.artwork(id: illustrationID)) {
             Label("前往 Pixiv 举报", systemImage: "exclamationmark.bubble")
         }
+    }
+
+    private func showUser() {
+        onShowUser(comment.user.id)
     }
 }

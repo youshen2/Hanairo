@@ -2,6 +2,7 @@ import SwiftUI
 
 struct IllustrationCommentsSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppNavigationCoordinator.self) private var navigation
     @Environment(PixivRepository.self) private var repository
     @Environment(LocalBlockStore.self) private var localBlocks
 
@@ -17,6 +18,7 @@ struct IllustrationCommentsSheet: View {
         NavigationStack {
             content
                 .navigationTitle(navigationTitle)
+                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     if allowsPosting {
                         ToolbarItem(placement: .primaryAction) {
@@ -38,7 +40,8 @@ struct IllustrationCommentsSheet: View {
                     IllustrationCommentRepliesView(
                         illustrationID: illustrationID,
                         parentComment: context.comment,
-                        allowsPosting: allowsPosting
+                        allowsPosting: allowsPosting,
+                        onShowUser: showUser
                     )
                 }
         }
@@ -83,9 +86,11 @@ struct IllustrationCommentsSheet: View {
                 PixivCommentRow(
                     illustrationID: illustrationID,
                     comment: comment,
+                    onShowUser: showUser,
                     onReply: allowsPosting ? { reply(to: comment) } : nil,
                     onShowReplies: comment.hasReplies ? { showReplies(for: comment) } : nil
                 )
+                .listRowInsets(.init(top: 8, leading: 16, bottom: 8, trailing: 16))
             }
 
             if
@@ -173,6 +178,11 @@ struct IllustrationCommentsSheet: View {
 
     private func showReplies(for comment: PixivComment) {
         repliesContext = CommentRepliesContext(comment: comment)
+    }
+
+    private func showUser(_ userID: Int) {
+        navigation.push(.user(id: userID))
+        dismiss()
     }
 
     private func refreshAfterComposing() {

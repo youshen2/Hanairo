@@ -29,6 +29,10 @@ final class AppNavigationCoordinator {
         paths[tab] = [route]
     }
 
+    func push(_ route: AppRoute) {
+        paths[selectedTab, default: []].append(route)
+    }
+
     private func preferredTab(for route: AppRoute) -> AppTab {
         switch route {
         case .search:

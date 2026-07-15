@@ -7,6 +7,7 @@ struct IllustrationCommentRepliesView: View {
     let illustrationID: Int
     let parentComment: PixivComment
     let allowsPosting: Bool
+    let onShowUser: (Int) -> Void
 
     @State private var replies = PaginatedStore<PixivComment>(id: { $0.id })
     @State private var composerContext: CommentComposerContext?
@@ -14,6 +15,7 @@ struct IllustrationCommentRepliesView: View {
     var body: some View {
         content
             .navigationTitle("回复")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 if allowsPosting {
                     ToolbarItem(placement: .primaryAction) {
@@ -60,9 +62,11 @@ struct IllustrationCommentRepliesView: View {
                         PixivCommentRow(
                             illustrationID: illustrationID,
                             comment: parentComment,
+                            onShowUser: onShowUser,
                             onReply: nil,
                             onShowReplies: nil
                         )
+                        .listRowInsets(.init(top: 8, leading: 16, bottom: 8, trailing: 16))
                     }
                 }
 
@@ -75,9 +79,11 @@ struct IllustrationCommentRepliesView: View {
                             PixivCommentRow(
                                 illustrationID: illustrationID,
                                 comment: reply,
+                                onShowUser: onShowUser,
                                 onReply: allowsPosting ? { composerContext = replyContext } : nil,
                                 onShowReplies: nil
                             )
+                            .listRowInsets(.init(top: 8, leading: 16, bottom: 8, trailing: 16))
                         }
                     }
 

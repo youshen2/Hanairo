@@ -173,16 +173,20 @@ private struct IllustrationStatisticsView: View {
     var body: some View {
         HStack(spacing: 0) {
             StatLabel(value: illustration.totalViews, title: "浏览")
+                .padding(.vertical, 14)
             Divider().frame(height: 32)
             StatLabel(value: illustration.totalBookmarks, title: "收藏")
+                .padding(.vertical, 14)
             Divider().frame(height: 32)
             Button(action: onComments) {
                 StatLabel(value: illustration.totalComments, title: "评论")
+                    .padding(.vertical, 14)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+            .accessibilityLabel("评论 \(illustration.totalComments)")
             .accessibilityHint("打开评论区")
         }
-        .padding(.vertical, 14)
     }
 }
