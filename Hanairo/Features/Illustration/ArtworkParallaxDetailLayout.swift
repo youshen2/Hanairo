@@ -48,9 +48,11 @@ struct ArtworkParallaxDetailLayout<Foreground: View>: View {
                         scrollOffset: scrollOffset,
                         isParallaxEnabled: isParallaxEnabled
                     )
+                    .zIndex(0)
 
                     foreground
                         .padding(.top, isParallaxEnabled ? -32 : 20)
+                        .zIndex(1)
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.bottom, 24)
@@ -60,6 +62,7 @@ struct ArtworkParallaxDetailLayout<Foreground: View>: View {
             } action: { _, newOffset in
                 scrollOffset = newOffset
             }
+            .scrollEdgeEffectHidden(true, for: .top)
         }
         .background {
             ArtworkDetailSurface()

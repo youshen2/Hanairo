@@ -4,21 +4,10 @@ struct IllustrationMetadataView: View {
     let illustration: PixivIllustration
     let onComments: () -> Void
 
-    @ViewBuilder
     var body: some View {
         let caption = TextSanitizer.plainText(from: illustration.caption)
 
-#if os(visionOS)
         metadataContent(caption: caption)
-#else
-        if #available(iOS 26.0, macOS 26.0, *) {
-            GlassEffectContainer(spacing: 14) {
-                metadataContent(caption: caption)
-            }
-        } else {
-            metadataContent(caption: caption)
-        }
-#endif
     }
 
     private func metadataContent(caption: String) -> some View {
@@ -35,17 +24,7 @@ struct IllustrationMetadataView: View {
             }
 
             if !caption.isEmpty {
-                FloatingGlassCard {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("作品简介")
-                            .font(.headline)
-                        Text(caption)
-                            .font(.body)
-                            .textSelection(.enabled)
-                    }
-                    .padding(18)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
+                IllustrationDescriptionCard(caption: caption)
             }
 
             if !illustration.tags.isEmpty {
@@ -60,6 +39,25 @@ struct IllustrationMetadataView: View {
                 }
             }
 
+        }
+    }
+}
+
+private struct IllustrationDescriptionCard: View {
+    let caption: String
+
+    var body: some View {
+        FloatingGlassCard {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("作品简介")
+                    .font(.headline)
+                Text(caption)
+                    .font(.body)
+                    .textSelection(.enabled)
+            }
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
