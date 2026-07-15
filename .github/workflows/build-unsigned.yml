@@ -1,0 +1,190 @@
+name: Build unsigned iOS artifact
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-ios-unsigned-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  select_run:
+    name: Avoid duplicate branch and tag builds
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.decision.outputs.should_build }}
+
+    steps:
+      - name: Checkout branch push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Select build run
+        id: decision
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SHOULD_BUILD=true
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == "refs/heads/main" ]]; then
+            MATCHING_TAG="$(git tag --points-at "${GITHUB_SHA}" --list 'v*')"
+            if [[ -n "${MATCHING_TAG}" ]]; then
+              SHOULD_BUILD=false
+              echo "跳过已由标签构建覆盖的 main 分支提交：${MATCHING_TAG}"
+            fi
+          fi
+
+          echo "should_build=${SHOULD_BUILD}" >> "${GITHUB_OUTPUT}"
+
+  build:
+    name: Build unsigned iOS IPA
+    needs: select_run
+    if: needs.select_run.outputs.should_build == 'true'
+    runs-on: macos-26
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          XCODE_APP=""
+          for candidate in /Applications/Xcode_26.5.app /Applications/Xcode_26.5.0.app /Applications/Xcode.app; do
+            if [[ -d "${candidate}" ]]; then
+              XCODE_APP="${candidate}"
+              break
+            fi
+          done
+
+          if [[ -z "${XCODE_APP}" ]]; then
+            echo "找不到可用的 Xcode"
+            exit 1
+          fi
+
+          sudo xcode-select -s "${XCODE_APP}/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -showsdks
+
+      - name: Build unsigned IPA
+        run: bash build_ios_unsigned.sh
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: Hanairo-iOS-unsigned-${{ github.run_number }}
+          path: build/Hanairo-iOS-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 14
+
+  release:
+    name: Create GitHub Release
+    needs:
+      - select_run
+      - build
+    if: startsWith(github.ref, 'refs/tags/v') && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download unsigned IPA
+        uses: actions/download-artifact@v8
+        with:
+          name: Hanairo-iOS-unsigned-${{ github.run_number }}
+          path: release-assets
+
+      - name: Generate release body
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          TAG_NAME="${GITHUB_REF_NAME}"
+          PREVIOUS_TAG="$(git tag --sort=-creatordate | grep -v "^${TAG_NAME}$" | head -n 1 || true)"
+
+          append_release_commits() {
+            awk '
+              !/^[[:space:]]*\[X\]/ {
+                print "- " $0
+                found = 1
+              }
+              END {
+                if (!found) {
+                  print "- 本次没有需要公开展示的提交记录。"
+                }
+              }
+            '
+          }
+
+          cat > release_body.md <<EOF
+          这是由 GitHub Actions 自动构建的 Hanairo iOS 发行版本。
+
+          ## 下载说明
+
+          - \`Hanairo-iOS-unsigned.ipa\`：iOS 未签名安装包
+
+          ## 安装说明
+
+          该 IPA 未签名，不能直接作为 App Store 应用安装，需要自行签名后安装。
+
+          ## 版本信息
+
+          - 版本：\`${TAG_NAME}\`
+          - Commit：\`${GITHUB_SHA}\`
+          - 构建编号：\`${GITHUB_RUN_NUMBER}\`
+
+          ## 更新内容
+
+          EOF
+
+          if [[ -n "${PREVIOUS_TAG}" ]]; then
+            echo "从 \`${PREVIOUS_TAG}\` 到 \`${TAG_NAME}\` 的提交：" >> release_body.md
+            echo "" >> release_body.md
+            git log "${PREVIOUS_TAG}..${TAG_NAME}" --pretty=format:"%s" \
+              | append_release_commits >> release_body.md
+          else
+            echo "最近提交：" >> release_body.md
+            echo "" >> release_body.md
+            git log -20 --pretty=format:"%s" \
+              | append_release_commits >> release_body.md
+          fi
+
+          echo "" >> release_body.md
+          echo "" >> release_body.md
+          echo "---" >> release_body.md
+          echo "" >> release_body.md
+          echo "由 GitHub Actions 自动发布。" >> release_body.md
+
+      - name: Create release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: Hanairo ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          body_path: release_body.md
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+          files: release-assets/Hanairo-iOS-unsigned.ipa
