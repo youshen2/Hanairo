@@ -1,9 +1,11 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct IllustrationDetailView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(AuthenticationStore.self) private var authentication
     @Environment(PixivRepository.self) private var repository
+    @Environment(ImageRepository.self) private var imageRepository
     @Environment(AppSettings.self) private var settings
     @Environment(ArtworkDownloadManager.self) private var downloadManager
     @Environment(BrowsingHistoryStore.self) private var browsingHistory
@@ -22,6 +24,9 @@ struct IllustrationDetailView: View {
     @State private var informationArtwork: PixivIllustration?
     @State private var didRecordHistory = false
     @State private var artworkAccentColor: Color?
+    @State private var isPreparingExport = false
+    @State private var preparedExport: PreparedArtworkExport?
+    @State private var isFileExporterPresented = false
 
     private var actionErrorBinding: Binding<Bool> {
         Binding(
@@ -39,6 +44,11 @@ struct IllustrationDetailView: View {
 
     private var requestKey: String {
         "\(illustrationID)-\(authentication.userID ?? 0)"
+    }
+
+    private var exportContentTypes: [UTType] {
+        preparedExport.map { [$0.format.contentType] }
+            ?? ArtworkExportDocument.writableContentTypes
     }
 
     var body: some View {
@@ -63,6 +73,7 @@ struct IllustrationDetailView: View {
                 ArtworkToolbarActions(
                     isBookmarked: repository.bookmarkState(for: illustration),
                     isChangingBookmark: isChangingBookmark,
+                    isPreparingExport: isPreparingExport,
                     pageCount: illustration.originalPageURLs.count,
                     shareURL: PixivWebLinks.artwork(id: illustration.id),
                     onBookmark: startBookmarkToggle,
@@ -72,11 +83,11 @@ struct IllustrationDetailView: View {
                             illustration: illustration
                         )
                     },
-                    onDownload: { pageIndex in
-                        enqueueDownload(
-                            pageIndices: [pageIndex],
-                            illustration: illustration
-                        )
+                    onExportZIP: {
+                        startExport(.zip, illustration: illustration)
+                    },
+                    onExportPDF: {
+                        startExport(.pdf, illustration: illustration)
                     }
                 )
 
@@ -159,6 +170,14 @@ struct IllustrationDetailView: View {
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
+        .fileExporter(
+            isPresented: $isFileExporterPresented,
+            document: preparedExport?.document,
+            contentTypes: exportContentTypes,
+            onCompletion: handleExportCompletion,
+            onCancellation: discardPreparedExport
+        )
+        .fileDialogBrowserOptions(.displayFileExtensions)
     }
 
     private func detailContent(_ illustration: PixivIllustration) -> some View {
@@ -228,6 +247,56 @@ struct IllustrationDetailView: View {
             illustration: illustration,
             pageIndices: pageIndices
         ).message
+    }
+
+    private func startExport(
+        _ format: ArtworkExportFormat,
+        illustration: PixivIllustration
+    ) {
+        guard !isPreparingExport else { return }
+        discardPreparedExport()
+        isPreparingExport = true
+        Task {
+            defer { isPreparingExport = false }
+            do {
+                let export = try await ArtworkExportService.prepare(
+                    illustration: illustration,
+                    format: format,
+                    imageRepository: imageRepository,
+                    onProgress: { _, _ in }
+                )
+                guard !Task.isCancelled else {
+                    ArtworkExportService.removeTemporaryFile(for: export)
+                    return
+                }
+                downloadManager.applyAutomaticBookmark(to: illustration)
+                preparedExport = export
+                isFileExporterPresented = true
+            } catch is CancellationError {
+                return
+            } catch {
+                actionError = error.localizedDescription
+            }
+        }
+    }
+
+    private func handleExportCompletion(_ result: Result<URL, any Error>) {
+        if case let .failure(error) = result {
+            actionError = error.localizedDescription
+        }
+        discardPreparedExport()
+    }
+
+    private func discardPreparedExport() {
+        let export = preparedExport
+        isFileExporterPresented = false
+        guard let export else { return }
+        Task { @MainActor in
+            await Task.yield()
+            ArtworkExportService.removeTemporaryFile(for: export)
+            guard preparedExport?.fileURL == export.fileURL else { return }
+            preparedExport = nil
+        }
     }
 
     private func load() async {

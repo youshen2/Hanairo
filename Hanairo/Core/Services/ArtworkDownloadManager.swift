@@ -89,7 +89,7 @@ final class ArtworkDownloadManager {
             )
         )
         saveTasks()
-        bookmarkIfNeeded(illustration)
+        applyAutomaticBookmark(to: illustration)
         startIfNeeded()
         return .queued(pages.count)
     }
@@ -193,7 +193,7 @@ final class ArtworkDownloadManager {
         }
     }
 
-    private func bookmarkIfNeeded(_ illustration: PixivIllustration) {
+    func applyAutomaticBookmark(to illustration: PixivIllustration) {
         guard settings.bookmarksOnDownload,
               !repository.bookmarkState(for: illustration) else {
             return

@@ -3,11 +3,13 @@ import SwiftUI
 struct ArtworkToolbarActions: ToolbarContent {
     let isBookmarked: Bool
     let isChangingBookmark: Bool
+    let isPreparingExport: Bool
     let pageCount: Int
     let shareURL: URL
     let onBookmark: () -> Void
     let onDownloadAll: () -> Void
-    let onDownload: (Int) -> Void
+    let onExportZIP: () -> Void
+    let onExportPDF: () -> Void
 
     var body: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
@@ -31,30 +33,31 @@ struct ArtworkToolbarActions: ToolbarContent {
         }
     }
 
-    @ViewBuilder
     private var downloadControl: some View {
-        if pageCount > 1 {
-            Menu {
-                Button("下载全部 \(pageCount) 页", systemImage: "square.and.arrow.down") {
-                    onDownloadAll()
-                }
-                Divider()
-                ForEach(0..<pageCount, id: \.self) { index in
-                    Button("下载第 \(index + 1) 页") {
-                        onDownload(index)
-                    }
-                }
-            } label: {
+        Menu {
+            Button(
+                pageCount > 1 ? "下载全部 \(pageCount) 页" : "下载作品",
+                systemImage: "square.and.arrow.down"
+            ) {
+                onDownloadAll()
+            }
+
+            Divider()
+            Button("保存为 ZIP", systemImage: "doc.zipper") {
+                onExportZIP()
+            }
+            Button("保存为 PDF", systemImage: "doc.richtext") {
+                onExportPDF()
+            }
+        } label: {
+            if isPreparingExport {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
                 Image(systemName: "arrow.down.to.line")
             }
-            .accessibilityLabel("下载作品")
-        } else {
-            Button {
-                onDownload(0)
-            } label: {
-                Image(systemName: "arrow.down.to.line")
-            }
-            .accessibilityLabel("下载作品")
         }
+        .disabled(isPreparingExport)
+        .accessibilityLabel(isPreparingExport ? "正在生成导出文件" : "下载作品")
     }
 }
