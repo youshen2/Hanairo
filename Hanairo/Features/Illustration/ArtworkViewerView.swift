@@ -5,19 +5,20 @@ struct ArtworkViewerView: View {
 
     let title: String
     let urls: [URL?]
-    let onDownload: ((Int) -> String)?
+    let onDownload: ((Int) async -> String)?
 
     @State private var selectedPage: Int
     @State private var showsChrome = true
     @State private var isCurrentPageZoomed = false
     @State private var zoomResetToken = 0
     @State private var downloadNotice: String?
+    @State private var isPreparingDownload = false
 
     init(
         title: String,
         urls: [URL?],
         initialPage: Int,
-        onDownload: ((Int) -> String)? = nil
+        onDownload: ((Int) async -> String)? = nil
     ) {
         self.title = title
         self.urls = urls.isEmpty ? [nil] : urls
@@ -58,12 +59,22 @@ struct ArtworkViewerView: View {
                 ToolbarItemGroup(placement: .primaryAction) {
                     if let onDownload {
                         Button {
-                            downloadNotice = onDownload(selectedPage)
+                            let page = selectedPage
+                            isPreparingDownload = true
+                            Task {
+                                downloadNotice = await onDownload(page)
+                                isPreparingDownload = false
+                            }
                         } label: {
-                            Image(systemName: "arrow.down.to.line")
+                            if isPreparingDownload {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Image(systemName: "arrow.down.to.line")
+                            }
                         }
-                        .disabled(urls[selectedPage] == nil)
-                        .accessibilityLabel("下载当前图片")
+                        .disabled(urls[selectedPage] == nil || isPreparingDownload)
+                        .accessibilityLabel(isPreparingDownload ? "正在准备下载" : "下载当前图片")
                     }
                     shareAction
                 }

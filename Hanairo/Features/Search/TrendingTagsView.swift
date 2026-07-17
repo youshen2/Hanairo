@@ -2,6 +2,8 @@ import SwiftUI
 
 struct TrendingTagsView: View {
     @Environment(LocalBlockStore.self) private var localBlocks
+    @Environment(PixivRepository.self) private var repository
+    @Environment(ArtworkDownloadManager.self) private var downloadManager
 
     let tags: [PixivTrendingTag]
     let onSelect: (String) -> Void
@@ -73,8 +75,23 @@ struct TrendingTagsView: View {
         ArtworkViewerView(
             title: "#\(tag.tag)",
             urls: [tag.illustration.imageURLs.fullSizeURL],
-            initialPage: 0
+            initialPage: 0,
+            onDownload: { _ in
+                await enqueueDownload(for: tag)
+            }
         )
+    }
+
+    private func enqueueDownload(for tag: PixivTrendingTag) async -> String {
+        do {
+            let illustration = try await repository.illustration(id: tag.illustration.id)
+            return downloadManager.enqueue(
+                illustration: illustration,
+                pageIndices: [0]
+            ).message
+        } catch {
+            return "下载失败：\(error.localizedDescription)"
+        }
     }
 
     private var visibleTags: [PixivTrendingTag] {
