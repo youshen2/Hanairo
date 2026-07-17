@@ -95,6 +95,88 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  telegram:
+    name: Send IPA to Telegram channel
+    needs:
+      - select_run
+      - build
+    if: >-
+      needs.select_run.outputs.should_build == 'true' &&
+      needs.build.result == 'success' &&
+      (github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Download unsigned IPA
+        uses: actions/download-artifact@v8
+        with:
+          name: Hanairo-iOS-unsigned-${{ github.run_number }}
+          path: telegram-assets
+
+      - name: Send IPA to Telegram
+        shell: bash
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          REPOSITORY: ${{ github.repository }}
+          REF_NAME: ${{ github.ref_name }}
+          COMMIT_SHA: ${{ github.sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${TELEGRAM_BOT_TOKEN}" ]]; then
+            echo "::error::缺少 Actions Secret：TELEGRAM_BOT_TOKEN"
+            exit 1
+          fi
+
+          if [[ -z "${TELEGRAM_CHAT_ID}" ]]; then
+            echo "::error::缺少 Actions Secret：TELEGRAM_CHAT_ID"
+            exit 1
+          fi
+
+          IPA_PATH="telegram-assets/Hanairo-iOS-unsigned.ipa"
+          if [[ ! -f "${IPA_PATH}" ]]; then
+            echo "::error::找不到待发送的 IPA：${IPA_PATH}"
+            exit 1
+          fi
+
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+          CAPTION="$(printf 'Hanairo iOS CI 构建完成\n\n版本：%s\nCommit：%s\n构建：#%s\n仓库：%s\n详情：%s' \
+            "${REF_NAME}" \
+            "${SHORT_SHA}" \
+            "${RUN_NUMBER}" \
+            "${REPOSITORY}" \
+            "${RUN_URL}")"
+
+          RESPONSE_FILE="${RUNNER_TEMP}/telegram-response.json"
+          if ! curl \
+              --fail-with-body \
+              --silent \
+              --show-error \
+              --connect-timeout 15 \
+              --max-time 600 \
+              --request POST \
+              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
+              --form-string "chat_id=${TELEGRAM_CHAT_ID}" \
+              --form "document=@${IPA_PATH};type=application/octet-stream" \
+              --form-string "caption=${CAPTION}" \
+              --output "${RESPONSE_FILE}"; then
+            DESCRIPTION="$(
+              python3 -c 'import json, sys; print(json.load(open(sys.argv[1], encoding="utf-8")).get("description", "未知错误"))' \
+                "${RESPONSE_FILE}" 2>/dev/null \
+                || echo "无法读取 Telegram API 错误响应"
+            )"
+            echo "::error::Telegram API：${DESCRIPTION}"
+            exit 1
+          fi
+
+          echo "IPA 已发送到 Telegram 频道。"
+
   release:
     name: Create GitHub Release
     needs:

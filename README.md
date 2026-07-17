@@ -56,6 +56,20 @@ Hanairo/
 
 运行 `bash build_ios_unsigned.sh` 可以在 `build/` 目录生成 iOS 未签名 IPA。GitHub Actions 会在 main 分支、Pull Request、`v*` 标签和手动触发时执行同一构建；标签构建完成后会自动创建 GitHub Release。
 
+### Telegram CI 发布
+
+每次 CI 成功生成 IPA 后，GitHub Actions 会通过 Telegram Bot 将 `Hanairo-iOS-unsigned.ipa` 直接发送到频道。外部 Fork 发起的 Pull Request 不会读取仓库 Secrets，因此只构建和保存产物，不会发送到频道。
+
+配置方式：
+
+1. 通过 Telegram 的 `@BotFather` 创建机器人并取得 Bot Token。
+2. 将机器人添加为目标频道管理员，并授予发布消息权限。
+3. 在 GitHub 仓库的 `Settings > Secrets and variables > Actions` 中添加以下 Repository secrets：
+   - `TELEGRAM_BOT_TOKEN`：机器人 Token。
+   - `TELEGRAM_CHAT_ID`：频道标识；公开频道可填写 `@频道用户名`，私有频道可填写 `-100` 开头的数字 ID。
+
+如果任一 Secret 缺失、机器人没有频道发布权限或 Telegram 上传失败，`Send IPA to Telegram channel` 任务会失败并显示原因。
+
 ## 说明
 
 Pixiv 的移动端接口并非公开稳定 API，接口或授权流程变化时需要同步调整网络层。功能结构参考了 [PixEz Flutter](https://github.com/Notsfsssf/pixez-flutter)。Hanairo 与 pixiv Inc. 没有隶属关系。
