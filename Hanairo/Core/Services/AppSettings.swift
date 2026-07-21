@@ -79,6 +79,9 @@ final class AppSettings {
     var artworkParallaxEnabled: Bool {
         didSet { defaults.set(artworkParallaxEnabled, forKey: Keys.artworkParallaxEnabled) }
     }
+    var checksUpdatesOnLaunch: Bool {
+        didSet { defaults.set(checksUpdatesOnLaunch, forKey: Keys.checksUpdatesOnLaunch) }
+    }
     var profileBackgroundScreenRatio: Double {
         didSet {
             defaults.set(profileBackgroundScreenRatio, forKey: Keys.profileBackgroundScreenRatio)
@@ -149,6 +152,7 @@ final class AppSettings {
         appearance = AppAppearance(rawValue: defaults.string(forKey: Keys.appearance) ?? "") ?? .system
         imageQuality = ArtworkImageQuality(rawValue: defaults.string(forKey: Keys.imageQuality) ?? "") ?? .large
         artworkParallaxEnabled = defaults.object(forKey: Keys.artworkParallaxEnabled) as? Bool ?? true
+        checksUpdatesOnLaunch = defaults.object(forKey: Keys.checksUpdatesOnLaunch) as? Bool ?? true
         profileBackgroundScreenRatio = Self.storedValue(
             defaults.object(forKey: Keys.profileBackgroundScreenRatio).map { _ in
                 defaults.double(forKey: Keys.profileBackgroundScreenRatio)
@@ -226,6 +230,7 @@ final class AppSettings {
         static let appearance = "settings.appearance"
         static let imageQuality = "settings.imageQuality"
         static let artworkParallaxEnabled = "settings.artworkParallaxEnabled"
+        static let checksUpdatesOnLaunch = "settings.appBehavior.checksUpdatesOnLaunch"
         static let profileBackgroundScreenRatio = "settings.profileBackgroundScreenRatio"
         static let downloadDestination = "settings.downloadDestination"
         static let defaultBookmarkVisibility = "settings.defaultBookmarkVisibility"

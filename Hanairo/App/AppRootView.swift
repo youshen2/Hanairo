@@ -27,6 +27,7 @@ struct AppRootView: View {
         .onOpenURL { url in
             navigation.open(url)
         }
+        .withAppLaunchExperience(isReady: rootState != .restoring)
     }
 
     private var accountThemeImageURL: URL? {

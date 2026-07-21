@@ -1,6 +1,12 @@
 # Hanairo
 
+[![License](https://img.shields.io/github/license/youshen2/MaloX)](https://github.com/youshen2/MaloX/blob/master/LICENSE)
+[![Download](https://img.shields.io/github/v/release/youshen2/MaloX)](https://github.com/youshen2/MaloX/releases)
+[![stars](https://img.shields.io/github/stars/youshen2/MaloX)](https://github.com/youshen2/MaloX/stargazers)
+
 Hanairo 是使用 SwiftUI 与 Apple 系统框架实现的第三方 Pixiv 客户端，遵守液态玻璃设计风格。
+
+[![Telegram Group](https://img.shields.io/badge/Telegram-加入群组-26A5E4?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/hanairo_official)
 
 ## 应用截图
 
@@ -46,10 +52,6 @@ Hanairo/
 
 视图只负责展示和局部交互，网络请求集中在 `PixivAPI`，登录状态集中在 `AuthenticationStore`，业务入口集中在 `PixivRepository`。
 
-## 登录说明
-
-应用启动时会先从钥匙串恢复会话；没有有效账户时只显示登录界面。点击登录后，Hanairo 通过 SwiftUI 的系统 Web Authentication Session 打开 Pixiv 授权页，自动接收 `pixiv://account` 回调、提取授权码并换取令牌，不需要复制粘贴。已有 Refresh Token 的用户可以进入独立的高级登录页面。令牌只保存在系统钥匙串中。
-
 ## 构建
 
 使用 Xcode 打开 `Hanairo.xcodeproj` 后运行 `Hanairo` Scheme。项目当前可编译到 iOS、macOS 与 visionOS；macOS 沙盒仅申请了网络客户端权限。
@@ -58,7 +60,7 @@ Hanairo/
 
 ### Telegram CI 发布
 
-每次 CI 成功生成 IPA 后，GitHub Actions 会先汇总上一次成功编译到本次编译之间的每条 Commit（短 SHA、标题和作者），再通过 Telegram Bot 将汇总和 `Hanairo-iOS-unsigned.ipa` 直接发送到频道。Commit 较多时会自动拆分为多条 Telegram 消息。外部 Fork 发起的 Pull Request 不会读取仓库 Secrets，因此只构建和保存产物，不会发送到频道。
+每次 CI 成功生成 IPA 后，GitHub Actions 会将上一次成功编译到本次编译之间的 Commit 汇总作为 Caption，并把 `Hanairo-iOS-unsigned.ipa` 附在同一条 Telegram 消息中。Caption 超过 Telegram 长度限制时会保留可容纳的 Commit，并注明省略数量及 Actions 链接。外部 Fork 发起的 Pull Request 不会读取仓库 Secrets，因此只构建和保存产物，不会发送到频道。
 
 配置方式：
 
@@ -70,9 +72,13 @@ Hanairo/
 
 如果任一 Secret 缺失、机器人没有频道发布权限或 Telegram 上传失败，`Send IPA to Telegram channel` 任务会失败并显示原因。
 
+`v*` 标签在 GitHub Release 创建成功后会改发版本更新消息，附带 Release IPA，并以非静默方式发送后自动置顶。机器人还需要频道的置顶消息权限；标签构建不会重复发送普通 CI 消息。Telegram 不会因频道置顶额外通知所有成员，最终通知仍受订阅者的频道通知设置影响。
+
 ## 说明
 
-Pixiv 的移动端接口并非公开稳定 API，接口或授权流程变化时需要同步调整网络层。功能结构参考了 [PixEz Flutter](https://github.com/Notsfsssf/pixez-flutter)。Hanairo 与 pixiv Inc. 没有隶属关系。
+Pixiv 的移动端接口并非公开稳定 API，接口或授权流程变化时需要同步调整网络层。功能结构参考了 [PixEz Flutter](https://github.com/Notsfsssf/pixez-flutter)。
+
+Hanairo 与 pixiv Inc. 没有隶属关系。
 
 ## 许可证
 
