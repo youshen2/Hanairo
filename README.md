@@ -1,8 +1,8 @@
 # Hanairo
 
-[![License](https://img.shields.io/github/license/youshen2/MaloX)](https://github.com/youshen2/MaloX/blob/master/LICENSE)
-[![Download](https://img.shields.io/github/v/release/youshen2/MaloX)](https://github.com/youshen2/MaloX/releases)
-[![stars](https://img.shields.io/github/stars/youshen2/MaloX)](https://github.com/youshen2/MaloX/stargazers)
+[![License](https://img.shields.io/github/license/youshen2/Hanairo)](https://github.com/youshen2/Hanairo/blob/master/LICENSE)
+[![Download](https://img.shields.io/github/v/release/youshen2/Hanairo)](https://github.com/youshen2/Hanairo/releases)
+[![stars](https://img.shields.io/github/stars/youshen2/Hanairo)](https://github.com/youshen2/Hanairo/stargazers)
 
 Hanairo 是使用 SwiftUI 与 Apple 系统框架实现的第三方 Pixiv 客户端，遵守液态玻璃设计风格。
 
