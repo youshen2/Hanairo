@@ -6,7 +6,6 @@ import UIKit
 struct ArtworkRelatedFlowConfiguration: Equatable {
     let sidebarWidth: CGFloat
     let availableSidebarHeight: CGFloat
-    let fullWidthStartHeight: CGFloat
 }
 
 private struct ArtworkRelatedFlowConfigurationKey: EnvironmentKey {
@@ -143,8 +142,7 @@ struct ArtworkParallaxDetailLayout<Details: View, Footer: View>: View {
         )
         let relatedFlow = ArtworkRelatedFlowConfiguration(
             sidebarWidth: max(detailWidth - 32, 1),
-            availableSidebarHeight: availableSidebarHeight,
-            fullWidthStartHeight: availableSidebarHeight
+            availableSidebarHeight: availableSidebarHeight
         )
 
         if isParallaxEnabled {

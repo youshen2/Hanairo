@@ -439,63 +439,78 @@ private struct RelatedArtworkSection: View {
             let sidebarItems = Array(visibleIllustrations.prefix(splitIndex))
             let fullWidthItems = Array(visibleIllustrations.dropFirst(splitIndex))
 
-            if fullWidthItems.isEmpty {
+            VStack(alignment: .leading, spacing: 0) {
                 VStack(alignment: .leading, spacing: 20) {
                     header
-                    phaseContent(
-                        illustrations: sidebarItems,
-                        onLoadMore: onLoadMore
-                    )
+
+                    if !sidebarItems.isEmpty {
+                        sidebarArtworkGrid(
+                            illustrations: sidebarItems,
+                            loadsMore: fullWidthItems.isEmpty
+                        )
+                    }
                 }
-                .environment(\.horizontalSizeClass, .compact)
                 .frame(width: configuration.sidebarWidth, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .topTrailing)
-            } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    VStack(alignment: .leading, spacing: 20) {
-                        header
-                        if !sidebarItems.isEmpty {
-                            ArtworkGrid(
-                                illustrations: sidebarItems,
-                                onLoadMore: nil,
-                                onBookmark: onBookmark
-                            )
-                        }
-                    }
-                    .environment(\.horizontalSizeClass, .compact)
-                    .frame(width: configuration.sidebarWidth, alignment: .topLeading)
-                    .frame(maxWidth: .infinity, alignment: .topTrailing)
-                    .onGeometryChange(for: CGFloat.self) { geometry in
-                        geometry.size.height
-                    } action: { newHeight in
-                        guard abs(flowingSidebarHeight - newHeight) > 0.5 else { return }
-                        flowingSidebarHeight = newHeight
-                    }
+                .onGeometryChange(for: CGFloat.self) { geometry in
+                    geometry.size.height
+                } action: { newHeight in
+                    guard abs(flowingSidebarHeight - newHeight) > 0.5 else { return }
+                    flowingSidebarHeight = newHeight
+                }
 
+                if !fullWidthItems.isEmpty {
                     Color.clear
                         .frame(
                             height: max(
-                                configuration.fullWidthStartHeight
+                                configuration.availableSidebarHeight
                                     - flowingSidebarHeight,
                                 0
                             )
                         )
 
-                    ArtworkGrid(
+                    ArtworkMasonryGrid(
                         illustrations: fullWidthItems,
+                        columnCount: dynamicTypeSize.isAccessibilitySize ? 2 : 4,
                         onLoadMore: onLoadMore,
                         onBookmark: onBookmark
                     )
                     .padding(.top, 24)
-
-                    PaginationStatusView(
-                        isLoading: store.isLoadingMore,
-                        errorMessage: store.loadMoreError,
-                        onRetry: onLoadMore
-                    )
-                    .padding(.top, 20)
                 }
+
+                PaginationStatusView(
+                    isLoading: store.isLoadingMore,
+                    errorMessage: store.loadMoreError,
+                    onRetry: onLoadMore
+                )
+                .padding(.top, 20)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipped()
+        }
+    }
+
+    @ViewBuilder
+    private func sidebarArtworkGrid(
+        illustrations: [PixivIllustration],
+        loadsMore: Bool
+    ) -> some View {
+        let columnCount = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+
+        if loadsMore {
+            ArtworkMasonryGrid(
+                illustrations: illustrations,
+                columnCount: columnCount,
+                onLoadMore: onLoadMore,
+                onBookmark: onBookmark
+            )
+        } else {
+            ArtworkMasonryGrid(
+                illustrations: illustrations,
+                columnCount: columnCount,
+                onLoadMore: nil,
+                onBookmark: onBookmark
+            )
         }
     }
 
@@ -548,7 +563,10 @@ private struct RelatedArtworkSection: View {
     ) -> Int {
         let spacing: CGFloat = 12
         let columnCount = dynamicTypeSize.isAccessibilitySize ? 1 : 2
-        let availableGridHeight = max(configuration.availableSidebarHeight - 50, 0)
+        let availableGridHeight = max(
+            configuration.availableSidebarHeight - 50,
+            0
+        )
         guard availableGridHeight > 0 else { return 0 }
 
         let totalSpacing = spacing * CGFloat(columnCount - 1)
@@ -560,8 +578,6 @@ private struct RelatedArtworkSection: View {
         var count = 0
 
         for illustration in visibleIllustrations {
-            guard (columnHeights.min() ?? 0) < availableGridHeight else { break }
-
             let targetColumn = columnHeights.indices.min {
                 columnHeights[$0] < columnHeights[$1]
             } ?? 0
@@ -570,7 +586,11 @@ private struct RelatedArtworkSection: View {
                 ? illustration.aspectRatio
                 : 0.75
             let estimatedHeight = cardWidth * (1 / aspectRatio + 0.34)
-            let nextHeight = columnHeights[targetColumn] + itemSpacing + estimatedHeight
+            let nextHeight = columnHeights[targetColumn]
+                + itemSpacing
+                + estimatedHeight
+
+            guard nextHeight <= availableGridHeight else { break }
 
             columnHeights[targetColumn] = nextHeight
             count += 1
