@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 struct RankingView: View {
     @Environment(AuthenticationStore.self) private var authentication
@@ -12,52 +15,26 @@ struct RankingView: View {
     @State private var actionError: String?
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 12) {
-                    Menu {
-                        Picker("排行榜", selection: $mode) {
-                            ForEach(availableModes) { mode in
-                                Label(mode.title, systemImage: mode.systemImage)
-                                    .tag(mode)
-                            }
-                        }
-                    } label: {
-                        Label(mode.title, systemImage: mode.systemImage)
-                            .font(.headline)
+        GeometryReader { geometry in
+            let usesExpandedFilters = prefersExpandedFilters
+            let usesFourColumns = usesFourColumnLayout(for: geometry.size.width)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    if usesExpandedFilters {
+                        wideFilterPanel
+                    } else {
+                        compactFilters
                     }
-                    .buttonStyle(.bordered)
 
-                    Spacer()
-
-                    if mode.isMature {
-                        Text("R-18")
-                            .font(.caption.bold())
-                            .foregroundStyle(.red)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(.red.opacity(0.12), in: Capsule())
-                    }
+                    content(columnCount: usesFourColumns ? 4 : nil)
                 }
-
-                Text(mode.description)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                DisclosureGroup("指定日期", isExpanded: $usesCustomDate) {
-                    DatePicker(
-                        "排行日期",
-                        selection: $selectedDate,
-                        in: ...Date(),
-                        displayedComponents: .date
-                    )
-                    .padding(.top, 8)
-                }
-
-                content
+                .padding(.horizontal)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
+            .refreshable {
+                await refresh()
+            }
         }
         .navigationTitle("排行榜")
         .task(id: requestKey) {
@@ -68,9 +45,6 @@ struct RankingView: View {
                 mode = .daily
             }
         }
-        .refreshable {
-            await refresh()
-        }
         .alert("操作失败", isPresented: actionErrorBinding) {
             Button("好", role: .cancel) {}
         } message: {
@@ -78,8 +52,131 @@ struct RankingView: View {
         }
     }
 
+    private var compactFilters: some View {
+        Group {
+            HStack(spacing: 12) {
+                Menu {
+                    rankingModePicker
+                } label: {
+                    Label(mode.title, systemImage: mode.systemImage)
+                        .font(.headline)
+                }
+                .buttonStyle(.bordered)
+
+                Spacer()
+
+                if mode.isMature {
+                    matureBadge
+                }
+            }
+
+            Text(mode.description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            DisclosureGroup("指定日期", isExpanded: $usesCustomDate) {
+                DatePicker(
+                    "排行日期",
+                    selection: $selectedDate,
+                    in: ...Date(),
+                    displayedComponents: .date
+                )
+                .padding(.top, 8)
+            }
+        }
+    }
+
+    private var wideFilterPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                Menu {
+                    rankingModePicker
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: mode.systemImage)
+                            .frame(width: 20)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("排行类型")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(mode.title)
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.primary)
+                        }
+
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 48)
+                    .background(
+                        .background.opacity(0.72),
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    )
+                }
+                .buttonStyle(.plain)
+
+                Toggle(isOn: $usesCustomDate) {
+                    Label("指定日期", systemImage: "calendar")
+                        .font(.subheadline.weight(.semibold))
+                }
+                .toggleStyle(.button)
+                .buttonStyle(.bordered)
+
+                if usesCustomDate {
+                    DatePicker(
+                        "排行日期",
+                        selection: $selectedDate,
+                        in: ...Date(),
+                        displayedComponents: .date
+                    )
+                    .labelsHidden()
+                    .fixedSize()
+                }
+
+                Spacer(minLength: 0)
+
+                if mode.isMature {
+                    matureBadge
+                }
+            }
+
+            Divider()
+
+            Text(mode.description)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.primary.opacity(0.06))
+        }
+    }
+
+    private var rankingModePicker: some View {
+        Picker("排行榜", selection: $mode) {
+            ForEach(availableModes) { mode in
+                Label(mode.title, systemImage: mode.systemImage)
+                    .tag(mode)
+            }
+        }
+    }
+
+    private var matureBadge: some View {
+        Text("R-18")
+            .font(.caption.bold())
+            .foregroundStyle(.red)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.red.opacity(0.12), in: Capsule())
+    }
+
     @ViewBuilder
-    private var content: some View {
+    private func content(columnCount: Int?) -> some View {
         switch feed.phase {
         case .idle, .loading:
             LoadingArtworkGrid()
@@ -96,6 +193,7 @@ struct RankingView: View {
                 ArtworkMasonryGrid(
                     illustrations: feed.items,
                     showsRanking: true,
+                    columnCount: columnCount,
                     onLoadMore: loadMore
                 ) { id in
                     await toggleBookmark(id: id)
@@ -177,6 +275,22 @@ struct RankingView: View {
         } catch {
             actionError = error.localizedDescription
         }
+    }
+
+    private var prefersExpandedFilters: Bool {
+#if os(iOS)
+        UIDevice.current.userInterfaceIdiom != .phone
+#else
+        true
+#endif
+    }
+
+    private func usesFourColumnLayout(for width: CGFloat) -> Bool {
+#if os(iOS)
+        UIDevice.current.userInterfaceIdiom != .phone && width >= 700
+#else
+        width >= 900
+#endif
     }
 }
 

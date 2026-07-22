@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 struct LibraryView: View {
     @Environment(AuthenticationStore.self) private var authentication
@@ -15,17 +18,26 @@ struct LibraryView: View {
     @State private var actionError: String?
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 16) {
-                sectionPicker
-                activeFilter
-                activeContent
+        GeometryReader { geometry in
+            let usesExpandedFilters = prefersExpandedFilters
+            let usesFourColumns = usesFourColumnLayout(for: geometry.size.width)
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 16) {
+                    if usesExpandedFilters {
+                        wideFilterPanel
+                    } else {
+                        sectionPicker
+                        activeFilter
+                    }
+                    activeContent(columnCount: usesFourColumns ? 4 : nil)
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
-        }
-        .refreshable {
-            await refresh()
+            .refreshable {
+                await refresh()
+            }
         }
         .navigationTitle("收藏与关注")
         .task(id: requestKey) {
@@ -52,6 +64,129 @@ struct LibraryView: View {
             }
         }
         .pickerStyle(.segmented)
+    }
+
+    private var wideFilterPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                wideFilterMenu(
+                    title: "内容",
+                    value: section.title,
+                    systemImage: section.systemImage
+                ) {
+                    Picker("内容", selection: $section) {
+                        ForEach(LibrarySection.allCases) { section in
+                            Label(section.title, systemImage: section.systemImage)
+                                .tag(section)
+                        }
+                    }
+                }
+
+                wideScopeFilter
+                Spacer(minLength: 0)
+            }
+
+            if section == .bookmarks {
+                Divider()
+                HStack(spacing: 12) {
+                    Label("标签", systemImage: "tag")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    BookmarkTagFilterView(
+                        tags: bookmarkTags.items,
+                        phase: bookmarkTags.phase,
+                        isLoadingMore: bookmarkTags.isLoadingMore,
+                        errorMessage: bookmarkTags.loadMoreError,
+                        selection: $selectedBookmarkTag,
+                        onRetry: retryBookmarkTags,
+                        onLoadMore: loadMoreBookmarkTags
+                    )
+                }
+            }
+        }
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(.primary.opacity(0.06))
+        }
+    }
+
+    @ViewBuilder
+    private var wideScopeFilter: some View {
+        switch section {
+        case .bookmarks:
+            wideFilterMenu(
+                title: "收藏范围",
+                value: bookmarkVisibility.title,
+                systemImage: "lock"
+            ) {
+                Picker("收藏范围", selection: $bookmarkVisibility) {
+                    ForEach(PixivVisibility.allCases) { visibility in
+                        Text(visibility.title).tag(visibility)
+                    }
+                }
+            }
+        case .followingFeed:
+            wideFilterMenu(
+                title: "关注范围",
+                value: followingScope.title,
+                systemImage: "person.2"
+            ) {
+                Picker("关注范围", selection: $followingScope) {
+                    ForEach(FollowingFeedScope.allCases) { scope in
+                        Text(scope.title).tag(scope)
+                    }
+                }
+            }
+        case .followingUsers:
+            wideFilterMenu(
+                title: "关注范围",
+                value: followingVisibility.title,
+                systemImage: "person.crop.circle"
+            ) {
+                Picker("关注范围", selection: $followingVisibility) {
+                    ForEach(PixivVisibility.allCases) { visibility in
+                        Text(visibility.title).tag(visibility)
+                    }
+                }
+            }
+        }
+    }
+
+    private func wideFilterMenu<Content: View>(
+        title: String,
+        value: String,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        Menu(content: content) {
+            HStack(spacing: 10) {
+                Image(systemName: systemImage)
+                    .frame(width: 20)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text(value)
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 14)
+            .frame(minHeight: 48)
+            .background(
+                .background.opacity(0.72),
+                in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder
@@ -92,17 +227,17 @@ struct LibraryView: View {
     }
 
     @ViewBuilder
-    private var activeContent: some View {
+    private func activeContent(columnCount: Int?) -> some View {
         switch section {
         case .bookmarks, .followingFeed:
-            illustrationContent
+            illustrationContent(columnCount: columnCount)
         case .followingUsers:
             userContent
         }
     }
 
     @ViewBuilder
-    private var illustrationContent: some View {
+    private func illustrationContent(columnCount: Int?) -> some View {
         switch illustrations.phase {
         case .idle, .loading:
             LoadingArtworkGrid()
@@ -121,6 +256,7 @@ struct LibraryView: View {
             } else {
                 ArtworkGrid(
                     illustrations: illustrations.items,
+                    columnCount: columnCount,
                     onLoadMore: loadMoreIllustrations
                 ) { id in
                     await toggleBookmark(id: id)
@@ -352,6 +488,32 @@ struct LibraryView: View {
             return
         } catch {
             actionError = error.localizedDescription
+        }
+    }
+
+    private var prefersExpandedFilters: Bool {
+#if os(iOS)
+        UIDevice.current.userInterfaceIdiom != .phone
+#else
+        true
+#endif
+    }
+
+    private func usesFourColumnLayout(for width: CGFloat) -> Bool {
+#if os(iOS)
+        UIDevice.current.userInterfaceIdiom != .phone && width >= 700
+#else
+        width >= 900
+#endif
+    }
+}
+
+private extension LibrarySection {
+    var systemImage: String {
+        switch self {
+        case .bookmarks: "heart"
+        case .followingFeed: "rectangle.stack"
+        case .followingUsers: "person.2"
         }
     }
 }
