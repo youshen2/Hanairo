@@ -42,25 +42,10 @@ struct ArtworkPagesView: View {
                         .frame(maxWidth: .infinity)
                         .aspectRatio(clampedAspectRatio, contentMode: .fit)
                         .clipped()
-                        .clipShape(
-                            UnevenRoundedRectangle(
-                                bottomLeadingRadius: index == displayURLs.indices.last ? 28 : 0,
-                                bottomTrailingRadius: index == displayURLs.indices.last ? 28 : 0,
-                                style: .continuous
-                            )
-                        )
                         .overlay(alignment: .topTrailing) {
                             if displayURLs.count > 1 {
                                 pageBadge(index: index)
                             }
-                        }
-                        .overlay(alignment: .bottomTrailing) {
-                            Image(systemName: "arrow.up.left.and.arrow.down.right")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white)
-                                .padding(8)
-                                .background(.black.opacity(0.55), in: Circle())
-                                .padding(10)
                         }
                 }
                 .buttonStyle(.plain)

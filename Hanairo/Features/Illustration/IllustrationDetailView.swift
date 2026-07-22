@@ -190,21 +190,19 @@ struct IllustrationDetailView: View {
             fullSizeURLs: fullSizeURLs,
             isParallaxEnabled: settings.artworkParallaxEnabled
         ) {
-            VStack(alignment: .leading, spacing: 20) {
-                IllustrationMetadataView(illustration: illustration) {
-                    commentSheet = CommentSheetContext(
-                        illustrationID: illustration.id,
-                        allowsPosting: illustration.commentAccessControl == 0
-                    )
-                }
-                RelatedArtworkSection(
-                    store: related,
-                    onRetry: retryRelated,
-                    onLoadMore: loadMoreRelated,
-                    onBookmark: toggleRelatedBookmark
+            IllustrationMetadataView(illustration: illustration) {
+                commentSheet = CommentSheetContext(
+                    illustrationID: illustration.id,
+                    allowsPosting: illustration.commentAccessControl == 0
                 )
             }
-            .padding(.horizontal)
+        } footer: {
+            RelatedArtworkSection(
+                store: related,
+                onRetry: retryRelated,
+                onLoadMore: loadMoreRelated,
+                onBookmark: toggleRelatedBookmark
+            )
         }
     }
 
@@ -396,45 +394,189 @@ private struct CommentSheetContext: Identifiable {
 }
 
 private struct RelatedArtworkSection: View {
+    @Environment(\.artworkRelatedFlowConfiguration) private var flowConfiguration
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(LocalBlockStore.self) private var localBlocks
+
     let store: PaginatedStore<PixivIllustration>
     let onRetry: () async -> Void
     let onLoadMore: () async -> Void
     let onBookmark: (Int) async -> Void
 
+    @State private var flowingSidebarHeight: CGFloat = 0
+
+    @ViewBuilder
     var body: some View {
         if store.phase != .loaded || !store.items.isEmpty {
-            HStack {
-                Text("相关作品")
-                    .font(.title2.weight(.bold))
-                Spacer()
-                if !store.items.isEmpty {
-                    Text(store.items.count, format: .number)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            switch store.phase {
-            case .idle, .loading:
-                LoadingArtworkGrid()
-            case let .failed(message):
-                ErrorStateView(message: message) {
-                    Task { await onRetry() }
-                }
-                .frame(minHeight: 220)
-            case .loaded:
-                ArtworkGrid(
-                    illustrations: store.items,
-                    onLoadMore: onLoadMore,
-                    onBookmark: onBookmark
-                )
-                PaginationStatusView(
-                    isLoading: store.isLoadingMore,
-                    errorMessage: store.loadMoreError,
-                    onRetry: onLoadMore
-                )
+            if let flowConfiguration {
+                flowingContent(configuration: flowConfiguration)
+            } else {
+                standardContent
             }
         }
+    }
+
+    @ViewBuilder
+    private var standardContent: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            header
+            phaseContent(illustrations: store.items, onLoadMore: onLoadMore)
+        }
+    }
+
+    @ViewBuilder
+    private func flowingContent(
+        configuration: ArtworkRelatedFlowConfiguration
+    ) -> some View {
+        switch store.phase {
+        case .idle, .loading, .failed:
+            standardContent
+                .environment(\.horizontalSizeClass, .compact)
+                .frame(width: configuration.sidebarWidth, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .topTrailing)
+        case .loaded:
+            let splitIndex = sidebarItemCount(for: configuration)
+            let sidebarItems = Array(visibleIllustrations.prefix(splitIndex))
+            let fullWidthItems = Array(visibleIllustrations.dropFirst(splitIndex))
+
+            if fullWidthItems.isEmpty {
+                VStack(alignment: .leading, spacing: 20) {
+                    header
+                    phaseContent(
+                        illustrations: sidebarItems,
+                        onLoadMore: onLoadMore
+                    )
+                }
+                .environment(\.horizontalSizeClass, .compact)
+                .frame(width: configuration.sidebarWidth, alignment: .topLeading)
+                .frame(maxWidth: .infinity, alignment: .topTrailing)
+            } else {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 20) {
+                        header
+                        if !sidebarItems.isEmpty {
+                            ArtworkGrid(
+                                illustrations: sidebarItems,
+                                onLoadMore: nil,
+                                onBookmark: onBookmark
+                            )
+                        }
+                    }
+                    .environment(\.horizontalSizeClass, .compact)
+                    .frame(width: configuration.sidebarWidth, alignment: .topLeading)
+                    .frame(maxWidth: .infinity, alignment: .topTrailing)
+                    .onGeometryChange(for: CGFloat.self) { geometry in
+                        geometry.size.height
+                    } action: { newHeight in
+                        guard abs(flowingSidebarHeight - newHeight) > 0.5 else { return }
+                        flowingSidebarHeight = newHeight
+                    }
+
+                    Color.clear
+                        .frame(
+                            height: max(
+                                configuration.fullWidthStartHeight
+                                    - flowingSidebarHeight,
+                                0
+                            )
+                        )
+
+                    ArtworkGrid(
+                        illustrations: fullWidthItems,
+                        onLoadMore: onLoadMore,
+                        onBookmark: onBookmark
+                    )
+                    .padding(.top, 24)
+
+                    PaginationStatusView(
+                        isLoading: store.isLoadingMore,
+                        errorMessage: store.loadMoreError,
+                        onRetry: onLoadMore
+                    )
+                    .padding(.top, 20)
+                }
+            }
+        }
+    }
+
+    private var header: some View {
+        HStack {
+            Text("相关作品")
+                .font(.title2.weight(.bold))
+            Spacer()
+            if !store.items.isEmpty {
+                Text(store.items.count, format: .number)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func phaseContent(
+        illustrations: [PixivIllustration],
+        onLoadMore: (() async -> Void)?
+    ) -> some View {
+        switch store.phase {
+        case .idle, .loading:
+            LoadingArtworkGrid()
+        case let .failed(message):
+            ErrorStateView(message: message) {
+                Task { await onRetry() }
+            }
+            .frame(minHeight: 220)
+        case .loaded:
+            ArtworkGrid(
+                illustrations: illustrations,
+                onLoadMore: onLoadMore,
+                onBookmark: onBookmark
+            )
+            PaginationStatusView(
+                isLoading: store.isLoadingMore,
+                errorMessage: store.loadMoreError,
+                onRetry: self.onLoadMore
+            )
+        }
+    }
+
+    private var visibleIllustrations: [PixivIllustration] {
+        store.items.filter { !localBlocks.isBlocked($0) }
+    }
+
+    private func sidebarItemCount(
+        for configuration: ArtworkRelatedFlowConfiguration
+    ) -> Int {
+        let spacing: CGFloat = 12
+        let columnCount = dynamicTypeSize.isAccessibilitySize ? 1 : 2
+        let availableGridHeight = max(configuration.availableSidebarHeight - 50, 0)
+        guard availableGridHeight > 0 else { return 0 }
+
+        let totalSpacing = spacing * CGFloat(columnCount - 1)
+        let cardWidth = max(
+            (configuration.sidebarWidth - totalSpacing) / CGFloat(columnCount),
+            1
+        )
+        var columnHeights = Array(repeating: CGFloat.zero, count: columnCount)
+        var count = 0
+
+        for illustration in visibleIllustrations {
+            guard (columnHeights.min() ?? 0) < availableGridHeight else { break }
+
+            let targetColumn = columnHeights.indices.min {
+                columnHeights[$0] < columnHeights[$1]
+            } ?? 0
+            let itemSpacing = columnHeights[targetColumn] == 0 ? 0 : spacing
+            let aspectRatio = illustration.aspectRatio > 0
+                ? illustration.aspectRatio
+                : 0.75
+            let estimatedHeight = cardWidth * (1 / aspectRatio + 0.34)
+            let nextHeight = columnHeights[targetColumn] + itemSpacing + estimatedHeight
+
+            columnHeights[targetColumn] = nextHeight
+            count += 1
+        }
+
+        return count
     }
 }
 
