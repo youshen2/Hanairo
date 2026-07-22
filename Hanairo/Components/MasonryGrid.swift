@@ -6,17 +6,20 @@ struct MasonryGrid<Item: Identifiable, Content: View>: View {
 
     let items: [Item]
     var spacing: CGFloat = 12
+    let columnCount: Int?
     let estimatedHeight: (Item) -> CGFloat
     let content: (Item) -> Content
 
     init(
         items: [Item],
         spacing: CGFloat = 12,
+        columnCount: Int? = nil,
         estimatedHeight: @escaping (Item) -> CGFloat,
         @ViewBuilder content: @escaping (Item) -> Content
     ) {
         self.items = items
         self.spacing = spacing
+        self.columnCount = columnCount
         self.estimatedHeight = estimatedHeight
         self.content = content
     }
@@ -34,7 +37,10 @@ struct MasonryGrid<Item: Identifiable, Content: View>: View {
         }
     }
 
-    private var columnCount: Int {
+    private var resolvedColumnCount: Int {
+        if let columnCount {
+            return max(columnCount, 1)
+        }
         if dynamicTypeSize.isAccessibilitySize {
             return 1
         }
@@ -42,8 +48,8 @@ struct MasonryGrid<Item: Identifiable, Content: View>: View {
     }
 
     private var columns: [[Item]] {
-        var result = Array(repeating: [Item](), count: columnCount)
-        var heights = Array(repeating: CGFloat.zero, count: columnCount)
+        var result = Array(repeating: [Item](), count: resolvedColumnCount)
+        var heights = Array(repeating: CGFloat.zero, count: resolvedColumnCount)
 
         for item in items {
             let targetColumn = heights.indices.min { heights[$0] < heights[$1] } ?? 0

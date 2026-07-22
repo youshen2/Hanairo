@@ -1,9 +1,13 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 struct DiscoveryView: View {
     @Environment(AuthenticationStore.self) private var authentication
     @Environment(PixivRepository.self) private var repository
     @Environment(LocalBlockStore.self) private var localBlocks
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var kind: PixivAPI.RecommendationKind = .illustration
     @State private var feed = PaginatedStore<PixivIllustration>(id: { $0.id })
@@ -11,19 +15,21 @@ struct DiscoveryView: View {
     @State private var actionError: String?
 
     var body: some View {
-        ScrollView {
-            LazyVStack(alignment: .leading, spacing: 20) {
-                Picker("作品类型", selection: $kind) {
-                    ForEach(PixivAPI.RecommendationKind.allCases) { item in
-                        Text(item.title).tag(item)
+        GeometryReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 20) {
+                    Picker("作品类型", selection: $kind) {
+                        ForEach(PixivAPI.RecommendationKind.allCases) { item in
+                            Text(item.title).tag(item)
+                        }
                     }
-                }
-                .pickerStyle(.segmented)
+                    .pickerStyle(.segmented)
 
-                content
+                    content(availableWidth: max(proxy.size.width - 32, 1))
+                }
+                .padding(.horizontal)
+                .padding(.bottom, 24)
             }
-            .padding(.horizontal)
-            .padding(.bottom, 24)
         }
         .navigationTitle("Hanairo")
         .toolbar { accountToolbar }
@@ -50,13 +56,7 @@ struct DiscoveryView: View {
             EmptyView()
         case .loaded:
             if !visibleRecommendedUsers.isEmpty {
-                HStack {
-                    Text("推荐作者")
-                        .font(.title3.weight(.bold))
-                    Spacer()
-                    NavigationLink("查看全部", value: AppRoute.recommendedUsers)
-                        .font(.subheadline)
-                }
+                recommendedUserHeader
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 12) {
                         ForEach(visibleRecommendedUsers.prefix(10)) { preview in
@@ -69,7 +69,7 @@ struct DiscoveryView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content(availableWidth: CGFloat) -> some View {
         switch feed.phase {
         case .idle, .loading:
             LoadingArtworkGrid()
@@ -83,21 +83,19 @@ struct DiscoveryView: View {
                 ContentUnavailableView("暂无推荐", systemImage: "sparkles")
                     .frame(minHeight: 360)
             } else {
-                FeaturedArtworkView(illustration: visibleFeedItems[0]) {
-                    await toggleBookmark(id: visibleFeedItems[0].id)
-                }
-                .task {
-                    guard visibleFeedItems.count == 1 else { return }
-                    await loadMore()
-                }
-                recommendedUserSection
-                Text("更多推荐")
-                    .font(.title2.weight(.bold))
-                ArtworkMasonryGrid(
-                    illustrations: Array(visibleFeedItems.dropFirst()),
-                    onLoadMore: loadMore
-                ) { id in
-                    await toggleBookmark(id: id)
+                if usesWideLayout(for: availableWidth + 32) {
+                    wideLoadedContent(availableWidth: availableWidth)
+                } else {
+                    featuredArtwork
+                    recommendedUserSection
+                    Text("更多推荐")
+                        .font(.title2.weight(.bold))
+                    ArtworkMasonryGrid(
+                        illustrations: Array(visibleFeedItems.dropFirst()),
+                        onLoadMore: loadMore
+                    ) { id in
+                        await toggleBookmark(id: id)
+                    }
                 }
                 PaginationStatusView(
                     isLoading: feed.isLoadingMore,
@@ -105,6 +103,137 @@ struct DiscoveryView: View {
                     onRetry: loadMore
                 )
             }
+        }
+    }
+
+    private var featuredArtwork: some View {
+        FeaturedArtworkView(illustration: visibleFeedItems[0]) {
+            await toggleBookmark(id: visibleFeedItems[0].id)
+        }
+        .task {
+            guard visibleFeedItems.count == 1 else { return }
+            await loadMore()
+        }
+    }
+
+    private func wideLoadedContent(availableWidth: CGFloat) -> some View {
+        let spacing: CGFloat = 20
+        let columnWidth = max((availableWidth - spacing) / 2, 1)
+        let aspectRatio = visibleFeedItems[0].aspectRatio > 0
+            ? visibleFeedItems[0].aspectRatio
+            : 0.75
+        let featuredHeight = columnWidth / aspectRatio
+        let recommendations = Array(visibleFeedItems.dropFirst())
+        let distribution = distributeWideArtwork(
+            illustrations: recommendations,
+            width: columnWidth,
+            leadingInitialHeight: featuredHeight,
+            trailingInitialHeight: wideRecommendedUserSectionHeight
+        )
+        let lastRecommendationID = recommendations.last?.id
+
+        return HStack(alignment: .top, spacing: spacing) {
+            VStack(alignment: .leading, spacing: 20) {
+                featuredArtwork
+
+                if !distribution.leading.isEmpty {
+                    wideLaneArtworkGrid(
+                        illustrations: distribution.leading,
+                        loadsMore: distribution.leading.last?.id == lastRecommendationID
+                    )
+                }
+            }
+            .frame(width: columnWidth, alignment: .topLeading)
+
+            VStack(alignment: .leading, spacing: 20) {
+                wideRecommendedUserSection(width: columnWidth)
+
+                if !distribution.trailing.isEmpty {
+                    wideLaneArtworkGrid(
+                        illustrations: distribution.trailing,
+                        loadsMore: distribution.trailing.last?.id == lastRecommendationID
+                    )
+                }
+            }
+            .frame(width: columnWidth, alignment: .topLeading)
+        }
+    }
+
+    @ViewBuilder
+    private func wideLaneArtworkGrid(
+        illustrations: [PixivIllustration],
+        loadsMore: Bool
+    ) -> some View {
+        if loadsMore {
+            ArtworkMasonryGrid(
+                illustrations: illustrations,
+                columnCount: 2,
+                onLoadMore: loadMore
+            ) { id in
+                await toggleBookmark(id: id)
+            }
+        } else {
+            ArtworkMasonryGrid(
+                illustrations: illustrations,
+                columnCount: 2,
+                onLoadMore: nil
+            ) { id in
+                await toggleBookmark(id: id)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func wideRecommendedUserSection(
+        width: CGFloat
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            recommendedUserHeader
+
+            switch recommendedUsers.phase {
+            case .idle, .loading:
+                ProgressView("正在发现作者…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .failed:
+                ContentUnavailableView(
+                    "推荐作者暂不可用",
+                    systemImage: "person.2.slash"
+                )
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .loaded:
+                if visibleRecommendedUsers.isEmpty {
+                    ContentUnavailableView("暂无推荐作者", systemImage: "person.2")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    let columnCount = recommendedUserColumnCount(for: width)
+                    LazyVGrid(
+                        columns: Array(
+                            repeating: GridItem(.flexible(), spacing: 12),
+                            count: columnCount
+                        ),
+                        spacing: 12
+                    ) {
+                        ForEach(
+                            visibleRecommendedUsers.prefix(
+                                recommendedUserColumnCount(for: width) * 2
+                            )
+                        ) { preview in
+                            RecommendedUserCard(preview: preview)
+                        }
+                    }
+                }
+            }
+        }
+        .frame(minHeight: wideRecommendedUserSectionHeight, alignment: .topLeading)
+    }
+
+    private var recommendedUserHeader: some View {
+        HStack {
+            Text("推荐作者")
+                .font(.title3.weight(.bold))
+            Spacer()
+            NavigationLink("查看全部", value: AppRoute.recommendedUsers)
+                .font(.subheadline)
         }
     }
 
@@ -214,6 +343,70 @@ struct DiscoveryView: View {
 
     private var visibleRecommendedUsers: [PixivUserPreview] {
         recommendedUsers.items.filter { !localBlocks.isBlocked($0.user) }
+    }
+
+    private func recommendedUserColumnCount(for width: CGFloat) -> Int {
+        if dynamicTypeSize.isAccessibilitySize {
+            return 1
+        }
+        return min(max(Int((width + 12) / 152), 2), 4)
+    }
+
+    private var wideRecommendedUserSectionHeight: CGFloat {
+        340
+    }
+
+    private func distributeWideArtwork(
+        illustrations: [PixivIllustration],
+        width: CGFloat,
+        leadingInitialHeight: CGFloat,
+        trailingInitialHeight: CGFloat
+    ) -> (
+        leading: [PixivIllustration],
+        trailing: [PixivIllustration]
+    ) {
+        let spacing: CGFloat = 12
+        let cardWidth = max((width - spacing) / 2, 1)
+        var columnHeights = [
+            leadingInitialHeight + 20,
+            leadingInitialHeight + 20,
+            trailingInitialHeight + 20,
+            trailingInitialHeight + 20
+        ]
+        var columnItemCounts = Array(repeating: 0, count: 4)
+        var leading: [PixivIllustration] = []
+        var trailing: [PixivIllustration] = []
+
+        for illustration in illustrations {
+            let targetColumn = columnHeights.indices.min {
+                columnHeights[$0] < columnHeights[$1]
+            } ?? 0
+            let itemSpacing = columnItemCounts[targetColumn] == 0 ? 0 : spacing
+            let aspectRatio = illustration.aspectRatio > 0
+                ? illustration.aspectRatio
+                : 0.75
+            let estimatedHeight = cardWidth * (1 / aspectRatio + 0.34)
+
+            columnHeights[targetColumn] += itemSpacing + estimatedHeight
+            columnItemCounts[targetColumn] += 1
+
+            if targetColumn < 2 {
+                leading.append(illustration)
+            } else {
+                trailing.append(illustration)
+            }
+        }
+
+        return (leading, trailing)
+    }
+
+    private func usesWideLayout(for width: CGFloat) -> Bool {
+        guard width >= 900 else { return false }
+#if os(iOS)
+        return UIDevice.current.userInterfaceIdiom != .phone
+#else
+        return true
+#endif
     }
 }
 
