@@ -244,7 +244,17 @@ struct DiscoveryView: View {
                 let account = authentication.account,
                 let id = account.numericID
             {
-                NavigationLink(value: AppRoute.user(id: id)) {
+                let preview = PixivUser(
+                    id: id,
+                    name: account.name,
+                    account: account.account,
+                    profileImageURLs: .init(
+                        medium: account.profileImageURLs.large
+                            ?? account.profileImageURLs.medium
+                    )
+                )
+
+                NavigationLink(value: AppRoute.user(id: id, preview: preview)) {
                     RemoteImageView(
                         url: account.profileImageURLs.large ?? account.profileImageURLs.medium
                     )
@@ -416,7 +426,9 @@ private struct RecommendedUserCard: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            NavigationLink(value: AppRoute.user(id: preview.user.id)) {
+            NavigationLink(
+                value: AppRoute.user(id: preview.user.id, preview: preview.user)
+            ) {
                 VStack(spacing: 8) {
                     RemoteImageView(url: preview.user.profileImageURLs.medium)
                         .frame(width: 58, height: 58)

@@ -10,7 +10,9 @@ struct UserRow: View {
     var body: some View {
         if !localBlocks.isBlocked(preview.user) {
             HStack(spacing: 12) {
-                NavigationLink(value: AppRoute.user(id: preview.user.id)) {
+                NavigationLink(
+                    value: AppRoute.user(id: preview.user.id, preview: preview.user)
+                ) {
                     HStack(spacing: 12) {
                         RemoteImageView(url: preview.user.profileImageURLs.medium)
                             .frame(width: 52, height: 52)

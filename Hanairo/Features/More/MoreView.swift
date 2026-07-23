@@ -60,7 +60,17 @@ struct MoreView: View {
     private var accountSection: some View {
         Section("账户") {
             if let account = authentication.account, let id = account.numericID {
-                NavigationLink(value: AppRoute.user(id: id)) {
+                let preview = PixivUser(
+                    id: id,
+                    name: account.name,
+                    account: account.account,
+                    profileImageURLs: .init(
+                        medium: account.profileImageURLs.large
+                            ?? account.profileImageURLs.medium
+                    )
+                )
+
+                NavigationLink(value: AppRoute.user(id: id, preview: preview)) {
                     HStack(spacing: 12) {
                         RemoteImageView(
                             url: account.profileImageURLs.large ?? account.profileImageURLs.medium

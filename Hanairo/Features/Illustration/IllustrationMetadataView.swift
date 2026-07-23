@@ -112,7 +112,7 @@ private struct IllustrationArtistLink: View {
     let user: PixivUser
 
     var body: some View {
-        NavigationLink(value: AppRoute.user(id: user.id)) {
+        NavigationLink(value: AppRoute.user(id: user.id, preview: user)) {
             HStack(spacing: 12) {
                 RemoteImageView(url: user.profileImageURLs.medium)
                     .frame(width: 46, height: 46)

@@ -46,8 +46,8 @@ struct AppTabRootView: View {
             DownloadsView()
         case let .downloadRecord(id):
             DownloadedArtworkDetailView(recordID: id)
-        case let .user(id):
-            UserDetailView(userID: id)
+        case let .user(id, preview):
+            UserDetailView(userID: id, initialUser: preview)
         case let .userConnections(userID, kind):
             UserConnectionsView(userID: userID, kind: kind)
         case let .search(query):

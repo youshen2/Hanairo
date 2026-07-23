@@ -61,7 +61,7 @@ private extension AppRoute {
         switch self {
         case let .illustration(id, _):
             .illustration(id)
-        case let .user(id):
+        case let .user(id, _):
             .user(id)
         default:
             nil

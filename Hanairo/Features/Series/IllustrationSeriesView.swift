@@ -206,7 +206,7 @@ private struct IllustrationSeriesHeader: View {
             }
 
             if let user = detail.user {
-                NavigationLink(value: AppRoute.user(id: user.id)) {
+                NavigationLink(value: AppRoute.user(id: user.id, preview: user)) {
                     HStack(spacing: 10) {
                         RemoteImageView(url: user.profileImageURLs.medium)
                             .frame(width: 38, height: 38)

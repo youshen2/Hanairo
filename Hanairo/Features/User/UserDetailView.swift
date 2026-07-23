@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 struct UserDetailView: View {
     @Environment(\.dismiss) private var dismiss
@@ -9,6 +12,7 @@ struct UserDetailView: View {
     @Environment(AppTheme.self) private var theme
 
     let userID: Int
+    let initialUser: PixivUser?
 
     @State private var detailState: LoadState<PixivUserDetail> = .idle
     @State private var completedDetailRequestKey: String?
@@ -18,18 +22,27 @@ struct UserDetailView: View {
     @State private var showsBlockConfirmation = false
     @State private var profileAccentColor: Color?
 
+    init(userID: Int, initialUser: PixivUser? = nil) {
+        self.userID = userID
+        self.initialUser = initialUser
+    }
+
     var body: some View {
-        Group {
+        ZStack {
             switch detailState {
             case .idle, .loading:
-                ProgressView("正在加载作者…")
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                loadingContent(initialUser)
+                    .transition(.opacity)
             case let .failed(message):
                 ErrorStateView(message: message, usesGlassButton: true) {
                     Task { await retryDetail() }
                 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background(Color.secondary.opacity(0.055))
+                .transition(.opacity)
             case let .loaded(detail):
                 userContent(detail)
+                    .transition(.opacity)
             }
         }
         .navigationTitle(navigationTitle)
@@ -93,29 +106,103 @@ struct UserDetailView: View {
         }
     }
 
+    private func loadingContent(_ user: PixivUser?) -> some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                Color.secondary.opacity(0.055)
+                    .ignoresSafeArea()
+
+                if let user {
+                    ProgressiveFadeImageView(url: user.profileImageURLs.medium)
+                        .frame(
+                            width: proxy.size.width,
+                            height: backgroundHeight(in: proxy)
+                        )
+
+                    loadingProfile(user, availableSize: proxy.size)
+                } else {
+                    ProgressView("正在加载作者…")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+#if os(iOS)
+        .ignoresSafeArea(edges: .top)
+#endif
+    }
+
+    private func loadingProfile(
+        _ user: PixivUser,
+        availableSize: CGSize
+    ) -> some View {
+        let usesLandscapeLayout = usesLandscapeLayout(in: availableSize)
+        let profileWidth = usesLandscapeLayout
+            ? min(max(availableSize.width * 0.36, 360), 480)
+            : availableSize.width
+
+        return ZStack(alignment: .top) {
+            RemoteImageView(url: user.profileImageURLs.medium)
+                .frame(width: 78, height: 78)
+                .clipShape(Circle())
+                .clipped()
+                .overlay(Circle().stroke(.white.opacity(0.9), lineWidth: 4))
+                .shadow(color: .black.opacity(0.22), radius: 14, y: 6)
+                .padding(.top, 168)
+
+            VStack(spacing: 8) {
+                Text(user.name)
+                    .font(.subheadline.weight(.semibold))
+                    .lineLimit(1)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 34)
+                    .background(.ultraThinMaterial, in: Capsule())
+
+                Text("@\(user.account)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                ProgressView("正在加载作者资料…")
+                    .font(.subheadline)
+                    .padding(.top, 42)
+            }
+            .padding(.top, 240)
+            .padding(.horizontal, 20)
+        }
+        .frame(width: profileWidth, height: availableSize.height, alignment: .top)
+        .padding(.leading, usesLandscapeLayout ? 16 : 0)
+    }
+
     private func userContent(_ detail: PixivUserDetail) -> some View {
         GeometryReader { proxy in
+            let usesLandscapeLayout = usesLandscapeLayout(in: proxy.size)
+
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 20) {
-                    UserProfileHeaderView(
-                        detail: detail,
-                        isCurrentUser: authentication.userID == detail.user.id
-                    )
+                    if usesLandscapeLayout {
+                        landscapeProfileOverview(detail, availableWidth: proxy.size.width)
 
-                    UserProfileDetailsView(detail: detail)
+                        artworkSection(
+                            detail,
+                            columnCount: 4,
+                            usesMenuFilter: true
+                        )
                         .padding(.horizontal)
+                    } else {
+                        UserProfileHeaderView(
+                            detail: detail,
+                            isCurrentUser: authentication.userID == detail.user.id
+                        )
 
-                    VStack(alignment: .leading, spacing: 16) {
-                        Picker("作者内容", selection: $selectedSection) {
-                            ForEach(AuthorArtworkSection.allCases) { section in
-                                Text(section.title).tag(section)
-                            }
-                        }
-                        .pickerStyle(.segmented)
+                        UserProfileDetailsView(detail: detail)
+                            .padding(.horizontal)
 
-                        artworkContent(detail)
+                        artworkSection(
+                            detail,
+                            columnCount: nil,
+                            usesMenuFilter: false
+                        )
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
                 .padding(.bottom, 24)
                 .background(alignment: .top) {
@@ -134,6 +221,49 @@ struct UserDetailView: View {
 #endif
     }
 
+    private func landscapeProfileOverview(
+        _ detail: PixivUserDetail,
+        availableWidth: CGFloat
+    ) -> some View {
+        let profileWidth = min(max(availableWidth * 0.36, 360), 480)
+
+        return HStack(alignment: .top, spacing: 20) {
+            UserProfileHeaderView(
+                detail: detail,
+                isCurrentUser: authentication.userID == detail.user.id
+            )
+            .frame(width: profileWidth)
+
+            UserProfileDetailsView(detail: detail)
+                .padding(.top, 168)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .padding(.horizontal)
+    }
+
+    private func artworkSection(
+        _ detail: PixivUserDetail,
+        columnCount: Int?,
+        usesMenuFilter: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if !usesMenuFilter {
+                Picker("作者内容", selection: $selectedSection) {
+                    ForEach(AuthorArtworkSection.allCases) { section in
+                        Text(section.title).tag(section)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            artworkContent(
+                detail,
+                columnCount: columnCount,
+                usesMenuFilter: usesMenuFilter
+            )
+        }
+    }
+
     private func backgroundURL(for detail: PixivUserDetail) -> URL? {
         detail.profile.backgroundImageURL
             ?? artworks.items.first?.previewURL
@@ -145,14 +275,42 @@ struct UserDetailView: View {
     }
 
     @ViewBuilder
-    private func artworkContent(_ detail: PixivUserDetail) -> some View {
+    private func artworkContent(
+        _ detail: PixivUserDetail,
+        columnCount: Int?,
+        usesMenuFilter: Bool
+    ) -> some View {
         HStack {
             Text(selectedSection.heading)
                 .font(.title2.weight(.bold))
-            Spacer()
             Text(selectedSection.count(in: detail.profile), format: .number)
                 .font(.subheadline.weight(.medium))
                 .foregroundStyle(.secondary)
+
+            Spacer()
+
+            if usesMenuFilter {
+                Menu {
+                    Picker("作者内容", selection: $selectedSection) {
+                        ForEach(AuthorArtworkSection.allCases) { section in
+                            Label(section.title, systemImage: section.systemImage)
+                                .tag(section)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Label(selectedSection.title, systemImage: selectedSection.systemImage)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .padding(.horizontal, 14)
+                    .frame(minHeight: 42)
+                    .background(.regularMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+            }
         }
 
         switch artworks.phase {
@@ -170,6 +328,7 @@ struct UserDetailView: View {
             } else {
                 ArtworkGrid(
                     illustrations: artworks.items,
+                    columnCount: columnCount,
                     onLoadMore: loadMoreArtworks
                 ) { id in
                     await toggleBookmark(id: id)
@@ -201,10 +360,10 @@ struct UserDetailView: View {
     }
 
     private var navigationTitle: String {
-        if case .loaded = detailState {
-            return ""
+        if case .failed = detailState {
+            return "作者主页"
         }
-        return "作者主页"
+        return ""
     }
 
     private var detailRequestKey: String {
@@ -216,8 +375,10 @@ struct UserDetailView: View {
     }
 
     private var profileThemeImageURL: URL? {
-        guard case let .loaded(detail) = detailState else { return nil }
-        return detail.user.profileImageURLs.medium
+        if case let .loaded(detail) = detailState {
+            return detail.user.profileImageURLs.medium
+        }
+        return initialUser?.profileImageURLs.medium
     }
 
     private func updateProfileAccent() async {
@@ -253,14 +414,18 @@ struct UserDetailView: View {
         do {
             let detail = try await repository.user(id: userID)
             guard !Task.isCancelled, activeRequestKey == detailRequestKey else { return }
-            detailState = .loaded(detail)
+            withAnimation(.easeInOut(duration: 0.24)) {
+                detailState = .loaded(detail)
+            }
             completedDetailRequestKey = activeRequestKey
         } catch is CancellationError {
             return
         } catch {
             guard activeRequestKey == detailRequestKey else { return }
             if showsLoading {
-                detailState = .failed(error.localizedDescription)
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    detailState = .failed(error.localizedDescription)
+                }
             } else {
                 actionError = error.localizedDescription
             }
@@ -325,6 +490,20 @@ struct UserDetailView: View {
         } catch {
             actionError = error.localizedDescription
         }
+    }
+
+    private func usesLandscapeLayout(in size: CGSize) -> Bool {
+        guard
+            size.width >= 900,
+            size.width > size.height
+        else {
+            return false
+        }
+#if os(iOS)
+        return UIDevice.current.userInterfaceIdiom != .phone
+#else
+        return true
+#endif
     }
 }
 
