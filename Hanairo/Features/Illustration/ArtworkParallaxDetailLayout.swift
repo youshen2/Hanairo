@@ -49,28 +49,44 @@ struct ArtworkParallaxDetailLayout<Details: View, Footer: View>: View {
     @ViewBuilder
     var body: some View {
         GeometryReader { safeAreaProxy in
+            let isParallaxMotionEnabled = isParallaxEnabled
+                && !isLandscape(size: safeAreaProxy.size)
+
             if isParallaxEnabled {
-                detailLayout(topSafeAreaInset: safeAreaProxy.safeAreaInsets.top)
+                detailLayout(
+                    topSafeAreaInset: safeAreaProxy.safeAreaInsets.top,
+                    isParallaxMotionEnabled: isParallaxMotionEnabled
+                )
 #if os(iOS)
                     .ignoresSafeArea(edges: .top)
 #endif
             } else {
-                detailLayout(topSafeAreaInset: safeAreaProxy.safeAreaInsets.top)
+                detailLayout(
+                    topSafeAreaInset: safeAreaProxy.safeAreaInsets.top,
+                    isParallaxMotionEnabled: false
+                )
             }
         }
     }
 
-    private func detailLayout(topSafeAreaInset: CGFloat) -> some View {
+    private func detailLayout(
+        topSafeAreaInset: CGFloat,
+        isParallaxMotionEnabled: Bool
+    ) -> some View {
         GeometryReader { proxy in
             ScrollView {
                 Group {
                     if usesWideLayout(for: proxy.size.width) {
                         wideDetailLayout(
                             proxy: proxy,
-                            topSafeAreaInset: topSafeAreaInset
+                            topSafeAreaInset: topSafeAreaInset,
+                            isParallaxMotionEnabled: isParallaxMotionEnabled
                         )
                     } else {
-                        compactDetailLayout(size: proxy.size)
+                        compactDetailLayout(
+                            size: proxy.size,
+                            isParallaxMotionEnabled: isParallaxMotionEnabled
+                        )
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -90,12 +106,16 @@ struct ArtworkParallaxDetailLayout<Details: View, Footer: View>: View {
         .scrollIndicators(.hidden)
     }
 
-    private func compactDetailLayout(size: CGSize) -> some View {
+    private func compactDetailLayout(
+        size: CGSize,
+        isParallaxMotionEnabled: Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             artworkPages(
                 width: size.width,
                 viewportHeight: size.height,
-                startsParallaxImmediately: false
+                startsParallaxImmediately: false,
+                isParallaxMotionEnabled: isParallaxMotionEnabled
             )
             .zIndex(0)
 
@@ -112,7 +132,8 @@ struct ArtworkParallaxDetailLayout<Details: View, Footer: View>: View {
     @ViewBuilder
     private func wideDetailLayout(
         proxy: GeometryProxy,
-        topSafeAreaInset: CGFloat
+        topSafeAreaInset: CGFloat,
+        isParallaxMotionEnabled: Bool
     ) -> some View {
         let metrics = ArtworkWideDetailMetrics(availableWidth: proxy.size.width)
         let detailTopPadding = isParallaxEnabled ? topSafeAreaInset + 20 : 20
@@ -129,7 +150,7 @@ struct ArtworkParallaxDetailLayout<Details: View, Footer: View>: View {
             illustration: illustration,
             width: mediaWidth
         )
-        let parallaxOverflow = isParallaxEnabled
+        let parallaxOverflow = isParallaxMotionEnabled
             ? ArtworkParallaxMetrics.offset(
                 activeScrollOffset: max(scrollOffset, 0),
                 viewportHeight: proxy.size.height
@@ -151,6 +172,7 @@ struct ArtworkParallaxDetailLayout<Details: View, Footer: View>: View {
                     width: mediaWidth,
                     viewportHeight: proxy.size.height,
                     startsParallaxImmediately: true,
+                    isParallaxMotionEnabled: isParallaxMotionEnabled,
                     showsOuterEdgeBlur: true
                 )
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -191,6 +213,7 @@ struct ArtworkParallaxDetailLayout<Details: View, Footer: View>: View {
                     width: mediaWidth,
                     viewportHeight: proxy.size.height,
                     startsParallaxImmediately: false,
+                    isParallaxMotionEnabled: false,
                     showsOutwardBlur: true
                 )
                 .frame(width: metrics.mediaWidth, alignment: .topLeading)
@@ -243,6 +266,7 @@ struct ArtworkParallaxDetailLayout<Details: View, Footer: View>: View {
         width: CGFloat,
         viewportHeight: CGFloat,
         startsParallaxImmediately: Bool,
+        isParallaxMotionEnabled: Bool,
         showsOutwardBlur: Bool = false,
         showsOuterEdgeBlur: Bool = false
     ) -> some View {
@@ -254,6 +278,7 @@ struct ArtworkParallaxDetailLayout<Details: View, Footer: View>: View {
             viewportHeight: viewportHeight,
             scrollOffset: scrollOffset,
             isParallaxEnabled: isParallaxEnabled,
+            isParallaxMotionEnabled: isParallaxMotionEnabled,
             startsParallaxImmediately: startsParallaxImmediately,
             showsOutwardBlur: showsOutwardBlur,
             showsOuterEdgeBlur: showsOuterEdgeBlur
@@ -267,6 +292,10 @@ struct ArtworkParallaxDetailLayout<Details: View, Footer: View>: View {
 #else
         return true
 #endif
+    }
+
+    private func isLandscape(size: CGSize) -> Bool {
+        size.width > size.height
     }
 }
 
@@ -329,6 +358,7 @@ private struct ArtworkDetailPagesLayout: View {
     let viewportHeight: CGFloat
     let scrollOffset: CGFloat
     let isParallaxEnabled: Bool
+    let isParallaxMotionEnabled: Bool
     let startsParallaxImmediately: Bool
     let showsOutwardBlur: Bool
     let showsOuterEdgeBlur: Bool
@@ -397,7 +427,8 @@ private struct ArtworkDetailPagesLayout: View {
     }
 
     private var parallaxOffset: CGFloat {
-        ArtworkParallaxMetrics.offset(
+        guard isParallaxMotionEnabled else { return 0 }
+        return ArtworkParallaxMetrics.offset(
             activeScrollOffset: activeScrollOffset,
             viewportHeight: viewportHeight
         )
@@ -414,7 +445,8 @@ private struct ArtworkDetailPagesLayout: View {
     }
 
     private var activeScrollOffset: CGFloat {
-        max(scrollOffset - parallaxStartOffset, 0)
+        guard isParallaxMotionEnabled else { return 0 }
+        return max(scrollOffset - parallaxStartOffset, 0)
     }
 
     private var transitionProgress: CGFloat {
