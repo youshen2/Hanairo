@@ -132,6 +132,7 @@ private struct IllustrationArtistLink: View {
                     .foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
+            .appNavigationTransitionSource(for: .user(id: user.id))
         }
         .buttonStyle(.plain)
     }

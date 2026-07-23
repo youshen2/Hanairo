@@ -37,6 +37,7 @@ struct UserRow: View {
                         }
                     }
                     .contentShape(Rectangle())
+                    .appNavigationTransitionSource(for: .user(id: preview.user.id))
                 }
                 .buttonStyle(.plain)
 

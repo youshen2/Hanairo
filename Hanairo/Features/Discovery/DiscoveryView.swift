@@ -251,6 +251,7 @@ struct DiscoveryView: View {
                     .frame(width: 30, height: 30)
                     .clipShape(Circle())
                     .clipped()
+                    .appNavigationTransitionSource(for: .user(id: id))
                 }
                 .accessibilityLabel("我的主页")
             }
@@ -426,6 +427,7 @@ private struct RecommendedUserCard: View {
                         .lineLimit(1)
                         .frame(width: 116)
                 }
+                .appNavigationTransitionSource(for: .user(id: preview.user.id))
             }
             .buttonStyle(.plain)
             FollowButton(user: preview.user, compact: true)
@@ -444,7 +446,7 @@ private struct FeaturedArtworkView: View {
 
     var body: some View {
         ZStack(alignment: .bottomLeading) {
-            NavigationLink(value: AppRoute.illustration(id: illustration.id)) {
+            NavigationLink(value: route) {
                 RemoteImageView(
                     url: illustration.previewURL
                 )
@@ -460,6 +462,7 @@ private struct FeaturedArtworkView: View {
                     )
                     .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                 }
+                .appNavigationTransitionSource(for: route)
             }
             .buttonStyle(.plain)
 
@@ -506,6 +509,10 @@ private struct FeaturedArtworkView: View {
 
     private var isBookmarked: Bool {
         repository.bookmarkState(for: illustration)
+    }
+
+    private var route: AppRoute {
+        .illustration(id: illustration.id, preview: illustration)
     }
 }
 

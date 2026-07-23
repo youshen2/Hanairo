@@ -1,7 +1,7 @@
 import Foundation
 
 enum AppRoute: Hashable {
-    case illustration(id: Int)
+    case illustration(id: Int, preview: PixivIllustration? = nil)
     case illustrationSeries(id: Int)
     case mangaWatchlist
     case recommendedUsers

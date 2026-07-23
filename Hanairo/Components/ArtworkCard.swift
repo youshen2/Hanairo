@@ -15,7 +15,7 @@ struct ArtworkCard: View {
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
-            NavigationLink(value: AppRoute.illustration(id: illustration.id)) {
+            NavigationLink(value: route) {
                 VStack(alignment: .leading, spacing: 8) {
                     RemoteImageView(
                         url: illustration.previewURL
@@ -44,6 +44,7 @@ struct ArtworkCard: View {
                         }
                         .padding(8)
                     }
+                    .appNavigationTransitionSource(for: route)
                     Text(illustration.title)
                         .font(.subheadline.weight(.semibold))
                         .foregroundStyle(.primary)
@@ -96,6 +97,10 @@ struct ArtworkCard: View {
 
     private var downloadTitle: String {
         illustration.pageCount > 1 ? "下载全部图片" : "下载图片"
+    }
+
+    private var route: AppRoute {
+        .illustration(id: illustration.id, preview: illustration)
     }
 
     private var downloadNoticeBinding: Binding<Bool> {

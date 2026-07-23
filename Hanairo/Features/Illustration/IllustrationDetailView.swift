@@ -12,8 +12,11 @@ struct IllustrationDetailView: View {
     @Environment(AppTheme.self) private var theme
 
     let illustrationID: Int
+    let initialIllustration: PixivIllustration?
 
-    @State private var state: LoadState<PixivIllustration> = .idle
+    @State private var state: LoadState<PixivIllustration>
+    @State private var isLoadingDetails: Bool
+    @State private var detailLoadError: String?
     @State private var related = PaginatedStore<PixivIllustration>(id: { $0.id })
     @State private var isChangingBookmark = false
     @State private var actionError: String?
@@ -27,6 +30,21 @@ struct IllustrationDetailView: View {
     @State private var isPreparingExport = false
     @State private var preparedExport: PreparedArtworkExport?
     @State private var isFileExporterPresented = false
+
+    init(
+        illustrationID: Int,
+        initialIllustration: PixivIllustration? = nil
+    ) {
+        self.illustrationID = illustrationID
+        self.initialIllustration = initialIllustration
+        if let initialIllustration {
+            _state = State(initialValue: .loaded(initialIllustration))
+            _isLoadingDetails = State(initialValue: true)
+        } else {
+            _state = State(initialValue: .idle)
+            _isLoadingDetails = State(initialValue: false)
+        }
+    }
 
     private var actionErrorBinding: Binding<Bool> {
         Binding(
@@ -69,7 +87,11 @@ struct IllustrationDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .tint(artworkAccentColor ?? theme.accentColor)
         .toolbar {
-            if case let .loaded(illustration) = state {
+            if
+                case let .loaded(illustration) = state,
+                !isLoadingDetails,
+                detailLoadError == nil
+            {
                 ArtworkToolbarActions(
                     isBookmarked: repository.bookmarkState(for: illustration),
                     isChangingBookmark: isChangingBookmark,
@@ -190,12 +212,7 @@ struct IllustrationDetailView: View {
             fullSizeURLs: fullSizeURLs,
             isParallaxEnabled: settings.artworkParallaxEnabled
         ) {
-            IllustrationMetadataView(illustration: illustration) {
-                commentSheet = CommentSheetContext(
-                    illustrationID: illustration.id,
-                    allowsPosting: illustration.commentAccessControl == 0
-                )
-            }
+            detailsContent(illustration)
         } footer: {
             RelatedArtworkSection(
                 store: related,
@@ -203,6 +220,31 @@ struct IllustrationDetailView: View {
                 onLoadMore: loadMoreRelated,
                 onBookmark: toggleRelatedBookmark
             )
+        }
+    }
+
+    @ViewBuilder
+    private func detailsContent(_ illustration: PixivIllustration) -> some View {
+        if let detailLoadError {
+            ErrorStateView(message: detailLoadError) {
+                Task { await load() }
+            }
+            .frame(maxWidth: .infinity, minHeight: 280)
+        } else if isLoadingDetails {
+            VStack(spacing: 12) {
+                ProgressView()
+                Text("正在加载作品信息…")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, minHeight: 280)
+        } else {
+            IllustrationMetadataView(illustration: illustration) {
+                commentSheet = CommentSheetContext(
+                    illustrationID: illustration.id,
+                    allowsPosting: illustration.commentAccessControl == 0
+                )
+            }
         }
     }
 
@@ -302,19 +344,34 @@ struct IllustrationDetailView: View {
         if let cachedIllustration {
             state = .loaded(cachedIllustration)
             recordHistoryIfNeeded(cachedIllustration)
+            isLoadingDetails = false
+            detailLoadError = nil
+        } else if let initialIllustration {
+            state = .loaded(initialIllustration)
+            isLoadingDetails = true
+            detailLoadError = nil
         } else {
             state = .loading
+            isLoadingDetails = true
+            detailLoadError = nil
         }
 
         do {
             let illustration = try await repository.refreshIllustration(id: illustrationID)
             state = .loaded(illustration)
             recordHistoryIfNeeded(illustration)
+            isLoadingDetails = false
+            detailLoadError = nil
         } catch is CancellationError {
             return
         } catch {
             if cachedIllustration == nil {
-                state = .failed(error.localizedDescription)
+                isLoadingDetails = false
+                if initialIllustration != nil {
+                    detailLoadError = error.localizedDescription
+                } else {
+                    state = .failed(error.localizedDescription)
+                }
             }
         }
     }

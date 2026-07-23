@@ -76,6 +76,7 @@ struct MoreView: View {
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .appNavigationTransitionSource(for: .user(id: id))
                 }
                 Button("退出登录", systemImage: "rectangle.portrait.and.arrow.right", role: .destructive) {
                     showsSignOutConfirmation = true
